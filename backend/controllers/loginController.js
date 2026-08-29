@@ -172,30 +172,38 @@ export async function login(req, res) {
         });
       }
 
-      // Owner with setup done → check pumps
-      const { rows: pumps } = await client.query(
-        `SELECT p.id, p.name, upr.role_id, r.name as role_name
-         FROM pumps p
-         JOIN user_pump_roles upr ON upr.pump_id = p.id AND upr.user_id = $1
-         JOIN roles r ON r.id = upr.role_id
-         WHERE p.owner_id = $1 AND p.is_active = TRUE AND upr.is_active = TRUE`,
-        [user.id]
-      );
+            // Owner with setup done → check pumps
+    // AFTER
+const { rows: pumps } = await client.query(
+  `SELECT id, name FROM pumps WHERE owner_id = $1 AND is_active = TRUE`,
+  [user.id]
+);
 
-      if (pumps.length === 1) {
-        // Single pump → go straight in
-        return await issueSession(client, user, pumps[0].id, pumps[0].role_id, pumps[0].role_name, remember_me, ip, ua, res);
-      }
+if (!pumps.length) {
+  // Safety net — shouldn't happen since a pump is auto-created in the wizard
+  await client.query('COMMIT');
+  return res.status(200).json({
+    redirect: 'setup_wizard',
+    user: { id: user.id, full_name: user.full_name, email: user.email, role: 'owner' },
+  });
+}
 
-      // Multiple pumps → pump selection required
-      await auditLog(client, { user_id: user.id, action: 'login_success', meta: { redirect: 'pump_selection' }, ip, ua });
-      await client.query('COMMIT');
-      return res.status(200).json({
-        redirect: 'pump_selection',
-        pumps,
-        user: { id: user.id, full_name: user.full_name, email: user.email, role: 'owner' },
-        temp_token: jwt.sign({ sub: user.id, phase: 'pump_select' }, process.env.JWT_SECRET, { expiresIn: '10m' }),
-      });
+const { rows: ownerRole } = await client.query(`SELECT id FROM roles WHERE name = 'owner'`);
+const ownerRoleId = ownerRole[0]?.id || null;
+
+if (pumps.length === 1) {
+  return await issueSession(client, user, pumps[0].id, ownerRoleId, 'owner', remember_me, ip, ua, res);
+}
+
+// Multiple pumps → selection required (rare edge case in this app's model)
+await auditLog(client, { user_id: user.id, action: 'login_success', meta: { redirect: 'pump_selection' }, ip, ua });
+await client.query('COMMIT');
+return res.status(200).json({
+  redirect: 'pump_selection',
+  pumps: pumps.map(p => ({ pump_id: p.id, pump_name: p.name, role_id: ownerRoleId, role_name: 'owner' })),
+  user: { id: user.id, full_name: user.full_name, email: user.email, role: 'owner' },
+  temp_token: jwt.sign({ sub: user.id, phase: 'pump_select' }, process.env.JWT_SECRET, { expiresIn: '10m' }),
+});
 
     } else {
       // ── Staff / admin user ─────────────────────────────────────────────

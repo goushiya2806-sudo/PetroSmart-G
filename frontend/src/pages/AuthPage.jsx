@@ -121,7 +121,7 @@ export default function AuthPage() {
   }, []);
 
   const [tab,      setTab]      = useState('login');   // 'login' | 'register'
-  const [view,     setView]     = useState('main');    // 'main' | 'otp' | 'forgot' | 'reset_otp' | 'reset_pw'
+  const [view,     setView]     = useState('main');    // 'main' | 'otp' | 'forgot' | 'reset_otp' | 'reset_pw' | 'pump_select'
   const [loading,  setLoading]  = useState(false);
   const [toast,    setToast]    = useState({ msg: '', type: '' });
   const [errors,   setErrors]   = useState({});
@@ -135,6 +135,11 @@ export default function AuthPage() {
 
   const [reg, setReg] = useState({ full_name: '', email: '', username: '', password: '' });
   const [lgn, setLgn] = useState({ identifier: '', password: '', remember_me: false });
+
+  // Pump selection (multi-pump login)
+  const [tempToken,   setTempToken]   = useState('');
+  const [pumpOptions, setPumpOptions] = useState([]);
+
   const [forgotEmail, setForgotEmail] = useState('');
   const [newPw,       setNewPw]       = useState('');
   const [confirmPw,   setConfirmPw]   = useState('');
@@ -171,8 +176,11 @@ export default function AuthPage() {
       });
       const data = await r.json();
       if (!r.ok) throw data;
-      setUserId(data.user_id); setOtpEmail(reg.email);
-      setOtp(''); setCanResend(false); setTimerKey(k => k + 1);
+      setUserId(data.user_id);
+      setOtpEmail(forgotEmail);
+      setOtp('');
+      setCanResend(false);
+      setTimerKey(k => k + 1);
       toast_('OTP sent to your email!');
       goView('otp');
     } catch (err) {
@@ -200,18 +208,66 @@ export default function AuthPage() {
         }
         throw data;
       }
+
+      // Debug: log exactly what the backend sent, so if this breaks
+      // again we see it immediately in the browser console instead
+      // of guessing.
+      console.log('[LOGIN RESPONSE]', data);
+
+      // Multi-pump accounts don't get a token yet — they get a
+      // temp_token + list of pumps, and must pick one first.
+      if (data.redirect === 'pump_selection') {
+        setTempToken(data.temp_token);
+        setPumpOptions(data.pumps || []);
+        goView('pump_select');
+        return;
+      }
+
+      if (!data.token) {
+        toast_('Login succeeded but no session token was returned. Check console.', 'error');
+        console.error('[LOGIN BUG] data.token is missing. Full response:', data);
+        setLoading(false);
+        return; // ← stop here, don't store "undefined" or redirect
+      }
+
       const store = lgn.remember_me ? localStorage : sessionStorage;
       store.setItem('token', data.token);
       store.setItem('user', JSON.stringify(data.user));
       toast_('Signed in! Redirecting…');
-      // Use window.location.href to force a full reload so AuthContext
-      // re-reads the newly stored token correctly.
       setTimeout(() => {
         if (data.redirect === 'setup_wizard') window.location.href = '/setup';
         else window.location.href = '/dashboard';
       }, 600);
-    } catch (err) {
+    }
+     catch (err) {
       toast_(err.error || 'Login failed', 'error');
+    } finally { setLoading(false); }
+  }
+
+  async function handleSelectPump(pumpId) {
+    if (!pumpId) return;
+    setLoading(true);
+    try {
+      const r = await fetch(`${API}/select-pump`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ temp_token: tempToken, pump_id: pumpId, remember_me: lgn.remember_me }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw data;
+
+      if (!data.token) {
+        toast_('Pump selected but no session token was returned. Check console.', 'error');
+        console.error('[SELECT-PUMP BUG] data.token is missing. Full response:', data);
+        return;
+      }
+
+      const store = lgn.remember_me ? localStorage : sessionStorage;
+      store.setItem('token', data.token);
+      store.setItem('user', JSON.stringify(data.user));
+      toast_('Signed in! Redirecting…');
+      setTimeout(() => { window.location.href = '/dashboard'; }, 600);
+    } catch (err) {
+      toast_(err.error || 'Could not select pump', 'error');
     } finally { setLoading(false); }
   }
 
@@ -249,25 +305,26 @@ export default function AuthPage() {
     } finally { setLoading(false); }
   }
 
-  async function handleForgot(e) {
-    e.preventDefault();
-    if (!forgotEmail) { setErrors({ forgotEmail: 'Email is required' }); return; }
-    setLoading(true);
-    try {
-      const r = await fetch(`${API}/forgot-password`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: forgotEmail }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw data;
-      setOtpEmail(forgotEmail);
-      setOtp(''); setCanResend(false); setTimerKey(k => k + 1);
-      toast_('Reset code sent!');
-      goView('reset_otp');
-    } catch (err) {
-      toast_(err.error || 'Failed to send reset code', 'error');
-    } finally { setLoading(false); }
-  }
+ async function handleForgot(e) {
+  e.preventDefault();
+  if (!forgotEmail) { setErrors({ forgotEmail: 'Email is required' }); return; }
+  setLoading(true);
+  try {
+    const r = await fetch(`${API}/forgot-password`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: forgotEmail }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw data;
+    setUserId(data.user_id);
+    setOtpEmail(forgotEmail);
+    setOtp(''); setCanResend(false); setTimerKey(k => k + 1);
+    toast_('Reset code sent!');
+    goView('reset_otp');
+  } catch (err) {
+    toast_(err.error || 'Failed to send reset code', 'error');
+  } finally { setLoading(false); }
+}
 
   async function handleResetPw(e) {
     e.preventDefault();
@@ -374,6 +431,33 @@ export default function AuthPage() {
                   </>
                 )}
                 <button className="ps-back-link" onClick={() => goView('main')}>← Go back</button>
+              </div>
+            )}
+
+            {view === 'pump_select' && (
+              <div className="ps-inner">
+                <div className="ps-otp-icon-wrap">
+                  <span className="material-symbols-outlined">local_gas_station</span>
+                </div>
+                <h2 className="ps-inner-title">Select a station</h2>
+                <p className="ps-sub">Your account has access to multiple stations.<br />Choose which one to sign in to.</p>
+
+                <div className="ps-pump-list">
+                  {pumpOptions.map(p => {
+                    const pumpId = p.id || p.pump_id;
+                    const pumpName = p.name || p.pump_name;
+                    return (
+                      <button key={pumpId} className="ps-btn"
+                        disabled={loading}
+                        onClick={() => handleSelectPump(pumpId)}
+                        style={{ marginBottom: 10 }}>
+                        {loading ? <><span className="ps-spin" />Signing in…</> : pumpName}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button className="ps-back-link" onClick={() => goView('main')}>← Back to Sign In</button>
               </div>
             )}
 

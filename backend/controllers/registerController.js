@@ -118,13 +118,13 @@ console.log("Returned from sendOTPEmail()");
 
     // Create user
     const { rows: newUser } = await client.query(
-      `INSERT INTO users
-       (full_name, email, username, password_hash, otp_hash, otp_type, otp_expires_at,
-        otp_resend_count, otp_window_start)
-       VALUES ($1, $2, $3, $4, $5, 'registration', $6, 1, now())
-       RETURNING id`,
-      [full_name, email.toLowerCase(), username, password_hash, otp_hash, otp_expires_at]
-    );
+  `INSERT INTO users
+   (full_name, email, username, password_hash, otp_hash, otp_type, otp_expires_at,
+    otp_resend_count, otp_window_start, created_by)
+   VALUES ($1, $2, $3, $4, $5, 'registration', $6, 1, now(), NULL)
+   RETURNING id`,
+  [full_name, email.toLowerCase(), username, password_hash, otp_hash, otp_expires_at]
+);
 
     const user_id = newUser[0].id;
 

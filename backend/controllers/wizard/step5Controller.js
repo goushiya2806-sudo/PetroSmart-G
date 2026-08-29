@@ -178,6 +178,41 @@ export async function saveStep5(req, res) {
     }
 
     // ─────────────────────────────────────────
+    // 4b. ENSURE OWNER HAS A ROLE ON THEIR OWN PUMP
+    // ─────────────────────────────────────────
+    // Without this, req.pump_id exists (created in attachWizardContext)
+    // but the owner has no row in user_pump_roles — so login's
+    // JOIN against user_pump_roles returns 0 rows and the owner
+    // gets locked out with "No active pump is assigned to this account."
+    const { rows: ownerRoleRows } = await client.query(
+      `SELECT id FROM roles WHERE name = 'owner'`
+    );
+
+    if (ownerRoleRows.length) {
+      await client.query(
+        `INSERT INTO user_pump_roles (user_id, pump_id, role_id, assigned_by, is_active)
+         VALUES ($1, $2, $3, $1, TRUE)
+         ON CONFLICT (user_id, pump_id) DO UPDATE SET
+           role_id = EXCLUDED.role_id,
+           is_active = TRUE,
+           updated_at = now()`,
+        [req.user.id, req.pump_id, ownerRoleRows[0].id]
+      );
+    } else {
+      console.error(`STEP 5: no 'owner' role found in roles table — owner ${req.user.id} not linked to pump ${req.pump_id}`);
+    }
+
+    // ─────────────────────────────────────────
+    // 4c. MARK WIZARD DONE ON THE USER
+    // ─────────────────────────────────────────
+    // Nothing else in the codebase sets this — without it, login
+    // always redirects back to setup_wizard even after Step 5.
+    await client.query(
+      `UPDATE users SET setup_wizard_done = TRUE, updated_at = now() WHERE id = $1`,
+      [req.user.id]
+    );
+
+    // ─────────────────────────────────────────
     // 5. MARK STEP COMPLETE
     // ─────────────────────────────────────────
     await markStepComplete(client, req.pump_id, 5);
@@ -187,6 +222,16 @@ export async function saveStep5(req, res) {
     return res.json({
       message: "Step 5 saved successfully (RBAC enabled)"
     });
+    // ─────────────────────────────────────────
+// 6. MARK OWNER'S SETUP WIZARD AS COMPLETE
+// ─────────────────────────────────────────
+await client.query(
+  `UPDATE users SET setup_wizard_done = TRUE, updated_at = now() WHERE id = $1`,
+  [req.user.id]
+);
+
+await markStepComplete(client, req.pump_id, 5);
+await client.query('COMMIT');
 
   } catch (err) {
     await client.query('ROLLBACK');
@@ -197,6 +242,7 @@ export async function saveStep5(req, res) {
       error: "Failed to save Step 5",
       detail: err.message
     });
+
 
   } finally {
     client.release();

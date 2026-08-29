@@ -1479,3 +1479,5 @@ export default function SetupWizard() {
     </div>
   );
 }
+// ── Named exports so the Settings page can reuse each step ────────
+export { Step1, Step2, Step3, Step4, Step5 };
