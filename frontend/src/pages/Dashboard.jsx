@@ -50,18 +50,32 @@ export default function Dashboard() {
             <span className="material-symbols-outlined">dashboard</span>
             <span className="font-label-md text-label-md">Dashboard</span>
           </a>
-          <a className="flex items-center gap-3 text-on-surface-variant hover:text-on-surface px-4 py-3 hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors" href="#">
-            <span className="material-symbols-outlined">shopping_cart</span>
-            <span className="font-label-md text-label-md">Purchases</span>
-          </a>
+          <button
+  type="button"
+  onClick={() => navigate('/purchases')}
+  className="w-full flex items-center gap-3 text-on-surface-variant hover:text-on-surface px-4 py-3 hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors text-left"
+>
+  <span className="material-symbols-outlined">shopping_cart</span>
+  <span className="font-label-md text-label-md">Purchases</span>
+</button>
+          
           <a className="flex items-center gap-3 text-on-surface-variant hover:text-on-surface px-4 py-3 hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors" href="#">
             <span className="material-symbols-outlined">inventory_2</span>
             <span className="font-label-md text-label-md">Stocks</span>
           </a>
-          <a className="flex items-center gap-3 text-on-surface-variant hover:text-on-surface px-4 py-3 hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors" href="#">
-            <span className="material-symbols-outlined">group</span>
-            <span className="font-label-md text-label-md">Suppliers</span>
-          </a>
+         <button
+  type="button"
+  onClick={() => navigate("/suppliers")}
+  className="w-full flex items-center gap-3 text-on-surface-variant hover:text-on-surface px-4 py-3 hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors text-left"
+>
+  <span className="material-symbols-outlined">
+    group
+  </span>
+
+  <span className="font-label-md text-label-md">
+    Suppliers
+  </span>
+</button>
           <a className="flex items-center gap-3 text-on-surface-variant hover:text-on-surface px-4 py-3 hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors" href="#">
             <span className="material-symbols-outlined">analytics</span>
             <span className="font-label-md text-label-md">Reports</span>

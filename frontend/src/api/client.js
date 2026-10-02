@@ -1,22 +1,42 @@
-// src/api/client.js
-
 const API = "http://localhost:5000/api";
 
 export async function apiRequest(path, method = "GET", body) {
-  const token = localStorage.getItem("token");
+  const token =
+    sessionStorage.getItem("token") ||
+    localStorage.getItem("token");
 
-  const res = await fetch(API + path, {
+  const options = {
     method,
     headers: {
       "Content-Type": "application/json",
-      Authorization: token ? `Bearer ${token}` : ""
     },
-    body: body ? JSON.stringify(body) : undefined
-  });
+  };
 
-  if (!res.ok) {
-    throw new Error("API Error");
+  if (token) {
+    options.headers.Authorization = `Bearer ${token}`;
   }
 
-  return res.json();
+  if (body !== undefined) {
+    options.body = JSON.stringify(body);
+  }
+
+  const res = await fetch(API + path, options);
+
+  let data = {};
+
+  try {
+    data = await res.json();
+  } catch {
+    data = {};
+  }
+
+  if (!res.ok) {
+    throw new Error(
+      data.message ||
+      data.error ||
+      "Something went wrong"
+    );
+  }
+
+  return data;
 }

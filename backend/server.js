@@ -6,8 +6,12 @@ import cors      from 'cors';
 import helmet    from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv    from 'dotenv';
+
 import authRoutes   from './routes/auth.js';
 import wizardRoutes from './routes/wizard.js';
+import purchaseRoutes from "./routes/purchases.js";
+import supplierRoutes from './routes/suppliers.js';
+
 
 dotenv.config();
 
@@ -62,8 +66,11 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ── Routes ────────────────────────────────────────────────────────
+
 app.use('/api/auth',   authRoutes);
 app.use('/api/wizard', wizardRoutes);
+app.use("/api/purchases", purchaseRoutes);
+app.use('/api/suppliers', supplierRoutes);
 
 // ── Health check ──────────────────────────────────────────────────
 app.get('/api/health', (_req, res) =>
